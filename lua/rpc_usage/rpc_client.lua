@@ -5,15 +5,25 @@ local c = rpc.create(
   'rpc_usage.rpc_server'
 )
 
-local result
-result = c:request('concat', {
+-- Avoid sequential call
+local req1 = c:request('concat', {
   a = 'foo',
   b = 'bar',
 })
-print(result)
-result = c:request('concat', {
+local req2 = c:request('concat', {
   a = 'foo1',
   b = 'bar1',
 })
-print(result)
+local req3 = c:request('fib', {
+  n = 44
+})
+
+-- Retrieve
+print(req1())
+print(req2())
+
+-- Retrieve async
+req3(function(result)
+  print(result)
+end)
 

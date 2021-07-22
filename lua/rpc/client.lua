@@ -23,48 +23,64 @@ client.start = function(self)
     end
 
     self.buffer = self.buffer .. chunk
-    local res, off = self.unpack(self.buffer)
-    if not res then
-      return
-    end
-    self.buffer = string.sub(self.buffer, off)
+    while self.buffer ~= '' do
+      local res, off = self.unpack(self.buffer)
+      if not res then
+        return
+      end
+      self.buffer = string.sub(self.buffer, off)
 
-    if res[1] == 0 then
-      if self.on_request[res[3]] then
-        self.on_request[res[3]](res[4], function(result)
-          self.pipe:write(self.pack({ 1, res[2], nil, result }))
-        end)
-      end
-    elseif res[1] == 2 then
-      if self.on_notification[res[3]] then
-        self.on_notification[res[3]](res[4])
-      end
-    elseif res[1] == 1 then
-      if self.pending_requests[res[2]] then
-        self.pending_requests[res[2]](res[4])
-        self.pending_requests[res[2]] = nil
+      if res[1] == 0 then
+        if self.on_request[res[3]] then
+          self.on_request[res[3]](res[4], function(result)
+            self.pipe:write(self.pack({ 1, res[2], nil, result }))
+          end)
+        end
+      elseif res[1] == 2 then
+        if self.on_notification[res[3]] then
+          self.on_notification[res[3]](res[4])
+        end
+      elseif res[1] == 1 then
+        if self.pending_requests[res[2]] then
+          self.pending_requests[res[2]](res[4])
+          self.pending_requests[res[2]] = nil
+        end
       end
     end
   end)
 end
 
-client.request = function(self, method, params, callback)
+client.request = function(self, method, params)
   self.request_id = self.request_id + 1
   self.pipe:write(self.pack({ 0, self.request_id, method, params }))
-  if callback then
-    self.pending_requests[self.request_id] = callback
-  else
-    local has_result = nil
-    local result
-    self.pending_requests[self.request_id] = function(result_)
-      result = result_
-      has_result = true
+  local request = setmetatable({
+    status = 'waiting',
+    result = nil,
+    callbacks = {},
+  }, {
+    __call = function(s, callback)
+      if callback then
+        if s.status == 'waiting' then
+          table.insert(s.callbacks, callback)
+        else
+          callback(s.result)
+        end
+      else
+        while s.status == 'waiting' do
+          uv.run('once')
+        end
+        return s.result
+      end
     end
-    while not has_result do
-      uv.run('once')
+  })
+  self.pending_requests[self.request_id] = function(result)
+    request.result = result
+    request.status = 'completed'
+    for _, callback in ipairs(request.callbacks) do
+      callback(result)
     end
-    return result
   end
+  return request
 end
 
 client.notify = function(self, method, params)
