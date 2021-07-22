@@ -2,7 +2,7 @@ local rpc = require('rpc')
 
 local c = rpc.create(
   string.format('/tmp/server-%s.sock', os.clock()),
-  'rpc_server'
+  'rpc_usage.rpc_server'
 )
 
 c:request('concat', {
