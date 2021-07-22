@@ -15,6 +15,11 @@ c:request('concat', {
     b = 'bar2',
   }, function(result)
     print(result)
+    c:request('fib', {
+      n = 43
+    }, function(result)
+      print(result)
+    end)
   end)
 end)
 
