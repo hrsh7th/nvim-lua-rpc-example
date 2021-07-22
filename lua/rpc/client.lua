@@ -1,3 +1,4 @@
+local uv = require('luv')
 local mpack = require('mpack')
 
 local client = {}
@@ -22,7 +23,6 @@ client.start = function(self)
     end
 
     self.buffer = self.buffer .. chunk
-
     local res, off = self.unpack(self.buffer)
     if not res then
       return
@@ -51,7 +51,20 @@ end
 client.request = function(self, method, params, callback)
   self.request_id = self.request_id + 1
   self.pipe:write(self.pack({ 0, self.request_id, method, params }))
-  self.pending_requests[self.request_id] = callback
+  if callback then
+    self.pending_requests[self.request_id] = callback
+  else
+    local has_result = nil
+    local result
+    self.pending_requests[self.request_id] = function(result_)
+      result = result_
+      has_result = true
+    end
+    while not has_result do
+      uv.run('once')
+    end
+    return result
+  end
 end
 
 client.notify = function(self, method, params)

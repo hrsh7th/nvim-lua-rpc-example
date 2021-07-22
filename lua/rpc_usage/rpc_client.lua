@@ -5,21 +5,15 @@ local c = rpc.create(
   'rpc_usage.rpc_server'
 )
 
-c:request('concat', {
+local result
+result = c:request('concat', {
   a = 'foo',
   b = 'bar',
-}, function(result)
-  print(result)
-  c:request('concat', {
-    a = 'foo1',
-    b = 'bar2',
-  }, function(result)
-    print(result)
-    c:request('fib', {
-      n = 43
-    }, function(result)
-      print(result)
-    end)
-  end)
-end)
+})
+print(result)
+result = c:request('concat', {
+  a = 'foo1',
+  b = 'bar1',
+})
+print(result)
 
