@@ -6,11 +6,10 @@ local client = {}
 client.new = function(pipe)
   local self = setmetatable({}, { __index = client })
   self.pipe = pipe
+  self.pipe:set_blocking(true)
   self.request_id = 1
   self.pending_requests = {}
   self.buffer = ''
-  self.pack = mpack.Packer()
-  self.unpack =mpack.Unpacker()
   self.on_request = {}
   self.on_notification = {}
   return self
@@ -21,19 +20,21 @@ client.start = function(self)
     if not chunk then
       return
     end
-
     self.buffer = self.buffer .. chunk
-    while self.buffer ~= '' do
-      local res, off = self.unpack(self.buffer)
+
+    local unpacker = mpack.Unpacker()
+    local res
+    local off = 1
+    while off <= #self.buffer do
+      res, off = unpacker(self.buffer, off)
       if not res then
-        return
+        return -- wait for more payload
       end
-      self.buffer = string.sub(self.buffer, off)
 
       if res[1] == 0 then
         if self.on_request[res[3]] then
           self.on_request[res[3]](res[4], function(result)
-            self.pipe:write(self.pack({ 1, res[2], nil, result }))
+            self:write({ 1, res[2], nil, result })
           end)
         end
       elseif res[1] == 2 then
@@ -47,12 +48,13 @@ client.start = function(self)
         end
       end
     end
+    self.buffer = string.sub(self.buffer, off)
   end)
 end
 
 client.request = function(self, method, params)
   self.request_id = self.request_id + 1
-  self.pipe:write(self.pack({ 0, self.request_id, method, params }))
+  self:write({ 0, self.request_id, method, params })
   local request = setmetatable({
     status = 'waiting',
     result = nil,
@@ -67,6 +69,7 @@ client.request = function(self, method, params)
         end
       else
         while s.status == 'waiting' do
+          uv.sleep(100)
           uv.run('once')
         end
         return s.result
@@ -84,7 +87,12 @@ client.request = function(self, method, params)
 end
 
 client.notify = function(self, method, params)
-  self.pipe:write(self.pack({ 2, method, params }))
+  self:write({ 2, method, params })
+end
+
+client.write = function(self, msg)
+  local packer = mpack.Packer()
+  self.pipe:write(packer(msg))
 end
 
 return client
