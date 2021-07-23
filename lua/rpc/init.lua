@@ -2,8 +2,8 @@ local uv = require('luv')
 local client = require('rpc.client')
 local proxy  = require('rpc.proxy')
 
----@see neovim/src/nvim/lua/vim.lua [vim._load_package(name)]
-local resolve_module = function(name)
+--@see neovim/src/nvim/lua/vim.lua
+local resolve = function(name)
   local basename = name:gsub('%.', '/')
   local paths = {"lua/"..basename..".lua", "lua/"..basename.."/init.lua"}
   for _,path in ipairs(paths) do
@@ -29,47 +29,58 @@ rpc.create = function(sock, module_name)
       server:listen(128, function()
         local pipe = uv.new_pipe(false)
         server:accept(pipe)
+
         local c = client.new('server', pipe)
-
-        -- TODO: neovim's require implementation.
-
-        -- print
-        _G.print = function(...)
-          return c:request('$/execute', {
-            path = { 'print' },
-            args = { ... },
-          })()
-        end
-
-        _G.vim = {
-          -- vim.inspect
-          inspect = function(...)
-            return c:request('$/execute', {
-              path = { 'vim', 'inspect' },
-              args = { ... }
+        c.on_request['$/connect'] = function(params, callback)
+          table.insert(package.loaders, 1, function(module)
+            local filename = c:request('$/resolve', {
+              module = module,
             })()
-          end,
-          -- vim.api.*
-          api = proxy.new({ 'vim', 'api' }, function(path, ...)
-            return c:request('$/execute', {
-              path = path,
-              args = { ... }
-            })()
+            local f, e = loadfile(filename)
+            return f or error(e)
           end)
-        }
 
-        -- export request method.
-        for k, v in pairs(loadfile(module_path)()) do
-          c.on_request[k] = v
+          -- print
+          _G.print = function(...)
+            return c:request('$/execute', {
+              path = { 'print' },
+              args = { ... },
+            })()
+          end
+
+          _G.vim = {
+            -- vim.inspect
+            inspect = function(...)
+              return c:request('$/execute', {
+                path = { 'vim', 'inspect' },
+                args = { ... }
+              })()
+            end,
+            -- vim.api.*
+            api = proxy.new({ 'vim', 'api' }, function(path, ...)
+              return c:request('$/execute', {
+                path = path,
+                args = { ... }
+              })()
+            end)
+          }
+
+          -- export methods.
+          for k, v in pairs(loadfile(module_path)()) do
+            c.on_request[k] = v
+          end
+
+          -- connected.
+          callback()
         end
         c:start()
       end)
       uv.run('default')
     end,
     sock,
-    resolve_module('rpc.client'),
-    resolve_module('rpc.proxy'),
-    resolve_module(module_name)
+    resolve('rpc.client'),
+    resolve('rpc.proxy'),
+    resolve(module_name)
   )
 
   vim.wait(1000, function()
@@ -80,6 +91,11 @@ rpc.create = function(sock, module_name)
   local pipe = uv.new_pipe(false)
   pipe:connect(sock)
   local c = client.new('client', pipe)
+  c.on_request['$/resolve'] = function(params, callback)
+    vim.schedule(function()
+      callback(resolve(params.module))
+    end)
+  end
   c.on_request['$/execute'] = function(params, callback)
     local F = _G
     for _, key in ipairs(params.path) do
@@ -94,9 +110,9 @@ rpc.create = function(sock, module_name)
     end
   end
   c:start()
+  c:request('$/connect')()
   return c
 end
 
 return rpc
-
 
