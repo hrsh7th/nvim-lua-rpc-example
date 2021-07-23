@@ -18,7 +18,6 @@ end
 local rpc = {}
 
 rpc.create = function(sock, module_name)
-
   uv.new_thread(
     function(sock, client_path, proxy_path, module_path)
       local uv = require('luv')
@@ -31,19 +30,28 @@ rpc.create = function(sock, module_name)
         local pipe = uv.new_pipe(false)
         server:accept(pipe)
         local c = client.new('server', pipe)
+
+        -- TODO: neovim's require implementation.
+
+        -- print
         _G.print = function(...)
           return c:request('$/execute', {
             path = { 'print' },
             args = { ... },
           })()
         end
-        _G.vim = {}
-        _G.vim.api = proxy.new({ 'vim', 'api' }, function(path, ...)
-          return c:request('$/execute', {
-            path = path,
-            args = { ... }
-          })()
-        end)
+
+        -- vim.api.*
+        _G.vim = {
+          api = proxy.new({ 'vim', 'api' }, function(path, ...)
+            return c:request('$/execute', {
+              path = path,
+              args = { ... }
+            })()
+          end)
+        }
+
+        -- export request method.
         for k, v in pairs(loadfile(module_path)()) do
           c.on_request[k] = v
         end
@@ -70,9 +78,13 @@ rpc.create = function(sock, module_name)
     for _, key in ipairs(params.path) do
       F = F[key]
     end
-    vim.schedule(function()
+    if vim.in_fast_event() then
+      vim.schedule(function()
+        callback(F(unpack(params.args)))
+      end)
+    else
       callback(F(unpack(params.args)))
-    end)
+    end
   end
   c:start()
   return c
