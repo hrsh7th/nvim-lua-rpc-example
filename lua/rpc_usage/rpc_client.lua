@@ -11,6 +11,6 @@ local req = c:request('get_buffer_option', {
 })
 
 req(function(err, res)
-  print(err, res)
+  print(err, vim.inspect(res))
 end)
 
