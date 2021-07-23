@@ -31,6 +31,12 @@ rpc.create = function(sock, module_name)
         local pipe = uv.new_pipe(false)
         server:accept(pipe)
         local c = client.new('server', pipe)
+        _G.print = function(...)
+          return c:request('$/execute', {
+            path = { 'print' },
+            args = { ... },
+          })()
+        end
         _G.vim = {}
         _G.vim.api = proxy.new({ 'vim', 'api' }, function(path, ...)
           return c:request('$/execute', {

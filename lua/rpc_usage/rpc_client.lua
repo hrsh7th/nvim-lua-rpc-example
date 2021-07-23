@@ -11,6 +11,6 @@ local req = c:request('get_buffer_option', {
 })
 
 req(function(err, res)
-  print(res)
+  print(err, res)
 end)
 
