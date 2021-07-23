@@ -1,19 +1,11 @@
 local M = {}
 
-local fib
-fib = function(n)
-  if n < 3 then
-    return n
-  end
-  return fib(n - 1) + fib(n - 2)
-end
-
 M.concat = function(params, callback)
   callback(params.a .. params.b)
 end
 
-M.fib = function(params, callback)
-  callback(fib(params.n))
+M.get_buffer_option = function(params, callback)
+  callback(vim.api.nvim_buf_get_option(0, params.option))
 end
 
 return M
