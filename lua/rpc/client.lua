@@ -20,7 +20,11 @@ client.start = function(self)
     if not chunk then
       return
     end
-    self.buffer = self.buffer .. chunk
+    if self.buffer ~= '' then
+      self.buffer = self.buffer .. chunk
+    else
+      self.buffer = chunk
+    end
 
     local unpacker = mpack.Unpacker()
     local res
@@ -48,7 +52,7 @@ client.start = function(self)
         end
       end
     end
-    self.buffer = string.sub(self.buffer, off)
+    self.buffer = ''
   end)
 end
 
@@ -69,7 +73,6 @@ client.request = function(self, method, params)
         end
       else
         while s.status == 'waiting' do
-          uv.sleep(100)
           uv.run('once')
         end
         return s.result
