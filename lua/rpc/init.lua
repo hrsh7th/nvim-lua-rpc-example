@@ -41,8 +41,15 @@ rpc.create = function(sock, module_name)
           })()
         end
 
-        -- vim.api.*
         _G.vim = {
+          -- vim.inspect
+          inspect = function(...)
+            return c:request('$/execute', {
+              path = { 'vim', 'inspect' },
+              args = { ... }
+            })()
+          end,
+          -- vim.api.*
           api = proxy.new({ 'vim', 'api' }, function(path, ...)
             return c:request('$/execute', {
               path = path,
